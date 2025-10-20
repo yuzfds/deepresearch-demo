@@ -7,7 +7,7 @@ from langgraph.types import Send
 from langgraph.graph import StateGraph
 from langgraph.graph import START, END
 from langchain_core.runnables import RunnableConfig
-from google.genai import Client
+from tavily import TavilyClient
 
 from agent.state import (
     OverallState,
@@ -15,7 +15,7 @@ from agent.state import (
     ReflectionState,
     WebSearchState,
 )
-from agent.configuration import Configuration
+from agent.configuration import Configuration, ModelReference
 from agent.prompts import (
     get_current_date,
     query_writer_instructions,
@@ -23,7 +23,7 @@ from agent.prompts import (
     reflection_instructions,
     answer_instructions,
 )
-from langchain_google_genai import ChatGoogleGenerativeAI
+from agent.models import get_model_factory
 from agent.utils import (
     get_citations,
     get_research_topic,
@@ -33,18 +33,23 @@ from agent.utils import (
 
 load_dotenv()
 
-if os.getenv("GEMINI_API_KEY") is None:
-    raise ValueError("GEMINI_API_KEY is not set")
+# Initialize model factory
+model_factory = get_model_factory()
 
-# Used for Google Search API
-genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Initialize Tavily Search API client
+def get_tavily_client():
+    """Get Tavily client for web search API."""
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        raise ValueError("TAVILY_API_KEY is not set. Please set the environment variable.")
+    return TavilyClient(api_key=api_key)
 
 
 # Nodes
 def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
     """LangGraph node that generates search queries based on the User's question.
 
-    Uses Gemini 2.0 Flash to create an optimized search queries for web research based on
+    Uses the configured language model to create optimized search queries for web research based on
     the User's question.
 
     Args:
@@ -60,14 +65,22 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     if state.get("initial_search_query_count") is None:
         state["initial_search_query_count"] = configurable.number_of_initial_queries
 
-    # init Gemini 2.0 Flash
-    llm = ChatGoogleGenerativeAI(
-        model=configurable.query_generator_model,
-        temperature=1.0,
-        max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
-    )
-    structured_llm = llm.with_structured_output(SearchQueryList)
+    # Get model reference and create model
+    model_ref = configurable.get_query_generator_ref()
+    provider = model_factory.get_provider(model_ref.provider)
+
+    # Create model with structured output
+    if provider.supports_structured_output(model_ref.model):
+        structured_llm = provider.create_model_with_structured_output(
+            model_ref.model,
+            SearchQueryList,
+            temperature=1.0
+        )
+    else:
+        # Fallback for models that don't support structured output
+        llm = provider.get_model(model_ref.model, temperature=1.0)
+        # We'll handle the structured output manually in this case
+        structured_llm = llm
 
     # Format the prompt
     current_date = get_current_date()
@@ -76,8 +89,26 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         research_topic=get_research_topic(state["messages"]),
         number_queries=state["initial_search_query_count"],
     )
+
     # Generate the search queries
     result = structured_llm.invoke(formatted_prompt)
+
+    # Handle non-structured output case
+    if not hasattr(result, 'query'):
+        # Parse the result manually (this is a fallback)
+        # In practice, you might want to use a more sophisticated parsing method
+        import re
+        queries = re.findall(r'"([^"]+)"', str(result))
+        if not queries:
+            queries = [str(result)]  # Fallback to using the entire result as one query
+
+        # Create a SearchQueryList-like object
+        class FallbackSearchQueryList:
+            def __init__(self, queries):
+                self.query = queries
+
+        result = FallbackSearchQueryList(queries)
+
     return {"search_query": result.query}
 
 
@@ -93,9 +124,9 @@ def continue_to_web_research(state: QueryGenerationState):
 
 
 def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
-    """LangGraph node that performs web research using the native Google Search API tool.
+    """LangGraph node that performs web research using search tools.
 
-    Executes a web search using the native Google Search API tool in combination with Gemini 2.0 Flash.
+    Executes web research using the Tavily Search API for all providers.
 
     Args:
         state: Current graph state containing the search query and research loop count
@@ -111,23 +142,52 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
         research_topic=state["search_query"],
     )
 
-    # Uses the google genai client as the langchain client doesn't return grounding metadata
-    response = genai_client.models.generate_content(
-        model=configurable.query_generator_model,
-        contents=formatted_prompt,
-        config={
-            "tools": [{"google_search": {}}],
-            "temperature": 0,
-        },
-    )
-    # resolve the urls to short urls for saving tokens and time
-    resolved_urls = resolve_urls(
-        response.candidates[0].grounding_metadata.grounding_chunks, state["id"]
-    )
-    # Gets the citations and adds them to the generated text
-    citations = get_citations(response, resolved_urls)
-    modified_text = insert_citation_markers(response.text, citations)
-    sources_gathered = [item for citation in citations for item in citation["segments"]]
+    # Use Tavily Search API for all providers
+    try:
+        tavily_client = get_tavily_client()
+
+        # Perform the search using Tavily
+        search_result = tavily_client.search(
+            query=state["search_query"],
+            max_results=5,
+            search_depth="basic",
+            include_answer=True
+        )
+
+        # Extract search results and format them
+        if search_result and 'results' in search_result:
+            # Format the search results into a readable text
+            search_text_parts = []
+            sources_gathered = []
+
+            # Add the answer if available
+            if 'answer' in search_result and search_result['answer']:
+                search_text_parts.append(f"Answer: {search_result['answer']}\n")
+
+            # Add individual search results
+            for i, result in enumerate(search_result['results'][:5], 1):
+                title = result.get('title', 'No title')
+                content = result.get('content', 'No content available')
+                url = result.get('url', '#')
+
+                search_text_parts.append(f"Source {i}: {title}\n{content}\nURL: {url}\n")
+
+                # Add to sources gathered
+                sources_gathered.append({
+                    "short_url": f"[{i}]",
+                    "value": url,
+                    "title": title
+                })
+
+            modified_text = "\n".join(search_text_parts)
+        else:
+            modified_text = f"No search results found for '{state['search_query']}'."
+            sources_gathered = []
+
+    except Exception as e:
+        # Handle search errors gracefully
+        modified_text = f"Error performing web search for '{state['search_query']}': {str(e)}"
+        sources_gathered = []
 
     return {
         "sources_gathered": sources_gathered,
@@ -155,6 +215,10 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     state["research_loop_count"] = state.get("research_loop_count", 0) + 1
     reasoning_model = state.get("reasoning_model", configurable.reflection_model)
 
+    # Get model reference and create model
+    model_ref = ModelReference.from_string(reasoning_model)
+    provider = model_factory.get_provider(model_ref.provider)
+
     # Format the prompt
     current_date = get_current_date()
     formatted_prompt = reflection_instructions.format(
@@ -162,14 +226,59 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    # init Reasoning Model
-    llm = ChatGoogleGenerativeAI(
-        model=reasoning_model,
-        temperature=1.0,
-        max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
-    )
-    result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
+
+    # Create model with structured output
+    if provider.supports_structured_output(model_ref.model):
+        structured_llm = provider.create_model_with_structured_output(
+            model_ref.model,
+            Reflection,
+            temperature=1.0
+        )
+        result = structured_llm.invoke(formatted_prompt)
+    else:
+        # Fallback for models that don't support structured output
+        llm = provider.get_model(model_ref.model, temperature=1.0)
+        raw_result = llm.invoke(formatted_prompt)
+
+        # Parse the result manually (simplified fallback)
+        # In practice, you might want to use a more sophisticated parsing method
+        import json
+        try:
+            # Try to parse JSON from the response
+            result_text = str(raw_result.content)
+            # Extract JSON if present
+            json_start = result_text.find('{')
+            json_end = result_text.rfind('}') + 1
+            if json_start != -1 and json_end != -1:
+                json_str = result_text[json_start:json_end]
+                parsed = json.loads(json_str)
+
+                # Create a Reflection-like object
+                class FallbackReflection:
+                    def __init__(self, data):
+                        self.is_sufficient = data.get('is_sufficient', False)
+                        self.knowledge_gap = data.get('knowledge_gap', '')
+                        self.follow_up_queries = data.get('follow_up_queries', [])
+
+                result = FallbackReflection(parsed)
+            else:
+                # If no JSON found, create default response
+                class FallbackReflection:
+                    def __init__(self):
+                        self.is_sufficient = True
+                        self.knowledge_gap = ''
+                        self.follow_up_queries = []
+
+                result = FallbackReflection()
+        except Exception:
+            # If parsing fails, create default response
+            class FallbackReflection:
+                def __init__(self):
+                    self.is_sufficient = True
+                    self.knowledge_gap = ''
+                    self.follow_up_queries = []
+
+            result = FallbackReflection()
 
     return {
         "is_sufficient": result.is_sufficient,
@@ -233,6 +342,10 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     configurable = Configuration.from_runnable_config(config)
     reasoning_model = state.get("reasoning_model") or configurable.answer_model
 
+    # Get model reference and create model
+    model_ref = ModelReference.from_string(reasoning_model)
+    provider = model_factory.get_provider(model_ref.provider)
+
     # Format the prompt
     current_date = get_current_date()
     formatted_prompt = answer_instructions.format(
@@ -241,13 +354,8 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
 
-    # init Reasoning Model, default to Gemini 2.5 Flash
-    llm = ChatGoogleGenerativeAI(
-        model=reasoning_model,
-        temperature=0,
-        max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
-    )
+    # Create model (temperature=0 for final answers)
+    llm = provider.get_model(model_ref.model, temperature=0)
     result = llm.invoke(formatted_prompt)
 
     # Replace the short urls with the original urls and add all used urls to the sources_gathered

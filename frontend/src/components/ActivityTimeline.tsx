@@ -66,7 +66,7 @@ export function ActivityTimeline({
             className="flex items-center justify-start text-sm w-full cursor-pointer gap-2 text-neutral-100"
             onClick={() => setIsTimelineCollapsed(!isTimelineCollapsed)}
           >
-            Research
+            研究
             {isTimelineCollapsed ? (
               <ChevronDown className="h-4 w-4 mr-2" />
             ) : (
@@ -86,7 +86,7 @@ export function ActivityTimeline({
                 </div>
                 <div>
                   <p className="text-sm text-neutral-300 font-medium">
-                    Searching...
+                    搜索中...
                   </p>
                 </div>
               </div>
@@ -123,7 +123,7 @@ export function ActivityTimeline({
                     </div>
                     <div>
                       <p className="text-sm text-neutral-300 font-medium">
-                        Searching...
+                        搜索中...
                       </p>
                     </div>
                   </div>
@@ -132,9 +132,9 @@ export function ActivityTimeline({
             ) : !isLoading ? ( // Only show "No activity" if not loading and no events
               <div className="flex flex-col items-center justify-center h-full text-neutral-500 pt-10">
                 <Info className="h-6 w-6 mb-3" />
-                <p className="text-sm">No activity to display.</p>
+                <p className="text-sm">暂无活动显示。</p>
                 <p className="text-xs text-neutral-600 mt-1">
-                  Timeline will update during processing.
+                  时间线将在处理过程中更新。
                 </p>
               </div>
             ) : null}

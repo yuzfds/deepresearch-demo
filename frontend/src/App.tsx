@@ -31,7 +31,7 @@ export default function App() {
       let processedEvent: ProcessedEvent | null = null;
       if (event.generate_query) {
         processedEvent = {
-          title: "Generating Search Queries",
+          title: "生成搜索查询",
           data: event.generate_query?.search_query?.join(", ") || "",
         };
       } else if (event.web_research) {
@@ -42,20 +42,20 @@ export default function App() {
         ];
         const exampleLabels = uniqueLabels.slice(0, 3).join(", ");
         processedEvent = {
-          title: "Web Research",
-          data: `Gathered ${numSources} sources. Related to: ${
-            exampleLabels || "N/A"
-          }.`,
+          title: "网络研究",
+          data: `收集了 ${numSources} 个来源。相关主题：${
+            exampleLabels || "无"
+          }。`,
         };
       } else if (event.reflection) {
         processedEvent = {
-          title: "Reflection",
-          data: "Analysing Web Research Results",
+          title: "反思分析",
+          data: "分析网络研究结果",
         };
       } else if (event.finalize_answer) {
         processedEvent = {
-          title: "Finalizing Answer",
-          data: "Composing and presenting the final answer.",
+          title: "完善答案",
+          data: "撰写并呈现最终答案。",
         };
         hasFinalizeEventOccurredRef.current = true;
       }
@@ -161,14 +161,14 @@ export default function App() {
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-full">
               <div className="flex flex-col items-center justify-center gap-4">
-                <h1 className="text-2xl text-red-400 font-bold">Error</h1>
+                <h1 className="text-2xl text-red-400 font-bold">错误</h1>
                 <p className="text-red-400">{JSON.stringify(error)}</p>
 
                 <Button
                   variant="destructive"
                   onClick={() => window.location.reload()}
                 >
-                  Retry
+                  重试
                 </Button>
               </div>
             </div>

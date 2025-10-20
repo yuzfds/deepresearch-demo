@@ -215,7 +215,7 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
           )
         }
       >
-        {copiedMessageId === message.id ? "Copied" : "Copy"}
+        {copiedMessageId === message.id ? "已复制" : "复制"}
         {copiedMessageId === message.id ? <CopyCheck /> : <Copy />}
       </Button>
     </div>
@@ -303,7 +303,7 @@ export function ChatMessagesView({
                   ) : (
                     <div className="flex items-center justify-start h-full">
                       <Loader2 className="h-5 w-5 animate-spin text-neutral-400 mr-2" />
-                      <span>Processing...</span>
+                      <span>处理中...</span>
                     </div>
                   )}
                 </div>

@@ -1,0 +1,55 @@
+# Model provider configuration
+# This file defines the available model providers and their settings
+
+providers:
+  aicloud_glm45:
+    api_key_env: AICLOUD_API_KEY
+    base_url: https://aicloud.oneainexus.cn:30013/inference/aicloud-kouhuashuai/glm4-5/v1
+    default_models:
+      query_generator: glm-4.5
+      reflection: glm-4.5
+      answer: glm-4.5
+    description: AICloud GLM-4.5 model
+    supports_structured_output: true
+    supports_tools: true
+    max_retries: 2
+
+  openai_compatible:
+    api_key_env: OPENAI_API_KEY
+    base_url: https://api.openai.com/v1
+    default_models:
+      query_generator: gpt-4
+      reflection: gpt-4
+      answer: gpt-4
+    description: OpenAI compatible models (including custom endpoints)
+    supports_structured_output: true
+    supports_tools: true
+    max_retries: 2
+
+  # Example configuration for Anthropic Claude
+  # Uncomment and modify as needed
+  # anthropic:
+  #   api_key_env: ANTHROPIC_API_KEY
+  #   base_url: https://api.anthropic.com
+  #   default_models:
+  #     query_generator: claude-3-sonnet-20240229
+  #     reflection: claude-3-sonnet-20240229
+  #     answer: claude-3-opus-20240229
+  #   description: Anthropic Claude models
+  #   supports_structured_output: true
+  #   supports_tools: true
+  #   max_retries: 2
+
+  # Example configuration for local models using Ollama
+  # Uncomment and modify as needed
+  # ollama:
+  #   api_key_env: OLLAMA_API_KEY
+  #   base_url: http://localhost:11434/v1
+  #   default_models:
+  #     query_generator: llama3.1
+  #     reflection: llama3.1
+  #     answer: llama3.1
+  #   description: Local models via Ollama
+  #   supports_structured_output: false
+  #   supports_tools: false
+  #   max_retries: 2

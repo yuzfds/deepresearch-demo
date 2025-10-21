@@ -21,7 +21,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--reasoning-model",
-        default="aicloud_glm45/glm-4.5",
+        default="aicloud/gpt-oss-120b",
         help="Model for the final answer",
     )
     args = parser.parse_args()

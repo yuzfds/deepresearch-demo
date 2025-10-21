@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -m py_compile src/agent/configuration.py)"
-    ],
-    "deny": [],
-    "ask": []
-  }
-}

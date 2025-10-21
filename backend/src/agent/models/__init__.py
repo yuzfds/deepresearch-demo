@@ -8,7 +8,6 @@ research agent.
 
 from .base import ModelProvider, ModelProviderConfig, ModelCapabilities
 from .factory import ModelFactory, get_model_factory, reset_model_factory
-from .openai_compatible_provider import OpenAICompatibleProvider
 
 __all__ = [
     "ModelProvider",
@@ -17,5 +16,4 @@ __all__ = [
     "ModelFactory",
     "get_model_factory",
     "reset_model_factory",
-    "OpenAICompatibleProvider",
 ]

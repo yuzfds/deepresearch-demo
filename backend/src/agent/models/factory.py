@@ -20,49 +20,56 @@ class ModelFactory:
         possible_paths = [
             "config/models.yaml",
             "models.yaml",
-            os.path.join(os.path.dirname(__file__), "../../../config/models.yaml"),
+            os.path.normpath(os.path.join(os.path.dirname(__file__), "../../../config/models.yaml")),
         ]
 
         for path in possible_paths:
-            if os.path.exists(path):
-                return path
+            try:
+                if os.path.exists(path):
+                    return os.path.abspath(path)
+            except (OSError, ValueError) as e:
+                continue
 
         # If no config file found, return default path
-        return "config/models.yaml"
+        return os.path.abspath("config/models.yaml")
 
     def _load_configs(self):
         """Load model provider configurations from file."""
-        if os.path.exists(self._config_path):
-            try:
-                with open(self._config_path, 'r', encoding='utf-8') as f:
-                    config_data = yaml.safe_load(f)
+        # Clear existing configurations first
+        self._provider_configs.clear()
 
-                if 'providers' in config_data:
-                    for provider_name, provider_data in config_data['providers'].items():
-                        config = ModelProviderConfig(
-                            name=provider_name,
-                            **provider_data
-                        )
-                        self._provider_configs[provider_name] = config
-            except Exception as e:
-                print(f"Warning: Failed to load model config from {self._config_path}: {e}")
-
-        # Always add default OpenAI compatible config if not present
-        if 'openai_compatible' not in self._provider_configs:
-            self._provider_configs['openai_compatible'] = ModelProviderConfig(
-                name='openai_compatible',
-                api_key_env='OPENAI_API_KEY',
-                base_url='https://api.openai.com/v1',
-                default_models={
-                    'query_generator': 'gpt-4',
-                    'reflection': 'gpt-4',
-                    'answer': 'gpt-4'
-                },
-                description='OpenAI compatible models (including custom endpoints)',
-                supports_structured_output=True,
-                supports_tools=True,
-                max_retries=2
-            )
+        try:
+            with open(self._config_path, 'r', encoding='utf-8') as f:
+                config_data = yaml.safe_load(f)
+                
+            if not config_data or 'providers' not in config_data:
+                return
+                
+            providers_config = config_data['providers']
+            if not providers_config:
+                return
+                
+            for provider_name, provider_data in providers_config.items():
+                try:
+                    config = ModelProviderConfig(
+                        name=provider_name,
+                        **provider_data
+                    )
+                    self._provider_configs[provider_name] = config
+                    
+                    # Register the provider implementation
+                    # For now, we assume all providers are OpenAI-compatible
+                    self.register_provider(OpenAICompatibleProvider, config)
+                    
+                except Exception as e:
+                    continue
+                    
+        except FileNotFoundError:
+            # Config file doesn't exist, that's okay
+            pass
+        except Exception as e:
+            # Other errors, continue without loading configs
+            pass
 
         
     def register_provider(self, provider_class: Type[ModelProvider], config: ModelProviderConfig):
@@ -84,10 +91,8 @@ class ModelFactory:
         """
         if provider_name not in self._providers:
             if provider_name in self._provider_configs:
-                # Create provider instance on demand
-                config = self._provider_configs[provider_name]
-                # All configured providers are assumed to be OpenAI compatible
-                self.register_provider(OpenAICompatibleProvider, config)
+                # No provider implementation available - all providers have been removed
+                raise ValueError(f"Provider '{provider_name}' is configured but no implementation is available")
             else:
                 raise ValueError(f"Unsupported provider: {provider_name}")
 
@@ -169,22 +174,7 @@ class ModelFactory:
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
         default_config = {
-            'providers': {
-                'openai_compatible': {
-                    'name': 'openai_compatible',
-                    'api_key_env': 'OPENAI_API_KEY',
-                    'base_url': 'https://api.openai.com/v1',
-                    'default_models': {
-                        'query_generator': 'gpt-4',
-                        'reflection': 'gpt-4',
-                        'answer': 'gpt-4'
-                    },
-                    'description': 'OpenAI compatible models (including custom endpoints)',
-                    'supports_structured_output': True,
-                    'supports_tools': True,
-                    'max_retries': 2
-                }
-            }
+            'providers': {}
         }
 
         with open(path, 'w', encoding='utf-8') as f:

@@ -36,6 +36,7 @@ load_dotenv()
 # Initialize model factory
 model_factory = get_model_factory()
 
+
 # Initialize Tavily Search API client
 def get_tavily_client():
     """Get Tavily client for web search API."""
@@ -69,18 +70,8 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     model_ref = configurable.get_query_generator_ref()
     provider = model_factory.get_provider(model_ref.provider)
 
-    # Create model with structured output
-    if provider.supports_structured_output(model_ref.model):
-        structured_llm = provider.create_model_with_structured_output(
-            model_ref.model,
-            SearchQueryList,
-            temperature=1.0
-        )
-    else:
-        # Fallback for models that don't support structured output
-        llm = provider.get_model(model_ref.model, temperature=1.0)
-        # We'll handle the structured output manually in this case
-        structured_llm = llm
+    # Use simple model (no structured output) to avoid issues
+    llm = provider.get_model(model_ref.model, temperature=1.0)
 
     # Format the prompt
     current_date = get_current_date()
@@ -91,25 +82,30 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     )
 
     # Generate the search queries
-    result = structured_llm.invoke(formatted_prompt)
+    result = llm.invoke(formatted_prompt)
 
-    # Handle non-structured output case
-    if not hasattr(result, 'query'):
-        # Parse the result manually (this is a fallback)
-        # In practice, you might want to use a more sophisticated parsing method
-        import re
-        queries = re.findall(r'"([^"]+)"', str(result))
-        if not queries:
-            queries = [str(result)]  # Fallback to using the entire result as one query
+    # Simple parsing of the response to extract queries
+    import re
+    # Try to extract quoted strings as queries
+    queries = re.findall(r'"([^"]+)"', str(result.content))
 
-        # Create a SearchQueryList-like object
-        class FallbackSearchQueryList:
-            def __init__(self, queries):
-                self.query = queries
+    # If no quoted strings found, try to extract numbered items
+    if not queries:
+        queries = re.findall(r'\d+\.\s*([^\n]+)', str(result.content))
 
-        result = FallbackSearchQueryList(queries)
+    # If still no queries found, split by newlines and clean up
+    if not queries:
+        lines = str(result.content).strip().split('\n')
+        queries = [line.strip().strip('"').strip("'") for line in lines if line.strip()]
 
-    return {"search_query": result.query}
+    # Final fallback - use the entire response as one query
+    if not queries:
+        queries = [str(result.content).strip()]
+
+    # Clean up queries and limit to reasonable number
+    queries = [q for q in queries if q][:5]  # Max 5 queries
+
+    return {"search_query": queries}
 
 
 def continue_to_web_research(state: QueryGenerationState):
@@ -137,6 +133,7 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     """
     # Configure
     configurable = Configuration.from_runnable_config(config)
+
     formatted_prompt = web_searcher_instructions.format(
         current_date=get_current_date(),
         research_topic=state["search_query"],
@@ -165,18 +162,21 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
                 search_text_parts.append(f"Answer: {search_result['answer']}\n")
 
             # Add individual search results
+            branch_id = str(state.get("id", "0"))
             for i, result in enumerate(search_result['results'][:5], 1):
                 title = result.get('title', 'No title')
                 content = result.get('content', 'No content available')
                 url = result.get('url', '#')
 
-                search_text_parts.append(f"Source {i}: {title}\n{content}\nURL: {url}\n")
+                marker = f"[S{branch_id}-{i}]"
+                search_text_parts.append(f"Source {i} {marker}: {title}\n{content}\nURL: {url}\n")
 
                 # Add to sources gathered
                 sources_gathered.append({
-                    "short_url": f"[{i}]",
+                    "short_url": marker,
                     "value": url,
-                    "title": title
+                    "title": title,
+                    "label": title
                 })
 
             modified_text = "\n".join(search_text_parts)
@@ -358,14 +358,27 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     llm = provider.get_model(model_ref.model, temperature=0)
     result = llm.invoke(formatted_prompt)
 
-    # Replace the short urls with the original urls and add all used urls to the sources_gathered
+    # Replace markers with full URLs and collect referenced sources
     unique_sources = []
     for source in state["sources_gathered"]:
         if source["short_url"] in result.content:
+            # Replace token with markdown link for frontend ReactMarkdown rendering
             result.content = result.content.replace(
-                source["short_url"], source["value"]
+                source["short_url"], f"{source['short_url']}({source['value']})"
             )
             unique_sources.append(source)
+
+    # Always append a references section with unique sources (by URL) as markdown list
+    if state["sources_gathered"]:
+        seen_urls = set()
+        references_lines = []
+        for src in state["sources_gathered"]:
+            if src["value"] in seen_urls:
+                continue
+            seen_urls.add(src["value"])
+            # Include marker and clickable title link
+            references_lines.append(f"- {src['short_url']} [{src['title']}]({src['value']})")
+        result.content = f"{result.content}\n\nReferences:\n" + "\n".join(references_lines)
 
     return {
         "messages": [AIMessage(content=result.content)],
@@ -399,3 +412,4 @@ builder.add_conditional_edges(
 builder.add_edge("finalize_answer", END)
 
 graph = builder.compile(name="pro-search-agent")
+# trigger reload

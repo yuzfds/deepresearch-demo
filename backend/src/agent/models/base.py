@@ -109,6 +109,39 @@ class ModelProvider(ABC):
         """
         return self.config.default_models.get(purpose, "")
 
+    def supports_structured_output(self, model_name: str) -> bool:
+        """Check if a model supports structured output.
+
+        Args:
+            model_name: Name of the model
+
+        Returns:
+            True if structured output is supported, False otherwise
+        """
+        capabilities = self.get_model_capabilities(model_name)
+        return capabilities.supports_structured_output
+
+    def create_model_with_structured_output(
+        self,
+        model_name: str,
+        schema_class: Type,
+        temperature: float = 0.7,
+        **kwargs: Any
+    ) -> BaseLanguageModel:
+        """Create a model instance with structured output.
+
+        Args:
+            model_name: Name of the model
+            schema_class: Pydantic model class for structured output
+            temperature: Temperature for generation
+            **kwargs: Additional model parameters
+
+        Returns:
+            Language model instance with structured output
+        """
+        model = self.get_model(model_name, temperature=temperature, **kwargs)
+        return model.with_structured_output(schema_class)
+
     def supports_feature(self, feature: str, model_name: str) -> bool:
         """Check if a model supports a specific feature.
 

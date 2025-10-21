@@ -4,7 +4,9 @@
     "agent": "./src/agent/graph.py:graph"
   },
   "http": {
-    "app": "./src/agent/app.py:app"
+    "app": "agent.app:app",
+    "host": "127.0.0.1",
+    "port": 8123
   },
   "env": ".env"
 }

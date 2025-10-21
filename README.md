@@ -28,28 +28,30 @@
 
 ```
 deepresearch-demo/
-├── frontend/                    # React前端应用
+├── backend/                         # 后端服务
 │   ├── src/
-│   │   ├── components/          # UI组件
-│   │   │   ├── InputForm.tsx   # 动态模型选择表单
-│   │   │   ├── ActivityTimeline.tsx
-│   │   │   └── ...
-│   │   └── App.tsx             # 主应用组件
-│   └── package.json
-├── backend/                     # LangGraph后端应用
-│   ├── src/agent/
-│   │   ├── models/             # 模型提供者系统
-│   │   │   ├── base.py         # 抽象基类
-│   │   │   ├── factory.py      # 模型工厂
-│   │   │   └── openai_compatible_provider.py  # OpenAI兼容提供者
-│   │   ├── configuration.py    # 扩展的配置系统
-│   │   ├── graph.py            # LangGraph研究流程
-│   │   ├── app.py              # FastAPI应用
-│   │   └── ...
+│   │   └── agent/
+│   │       ├── models/             # 模型管理
+│   │       │   ├── __init__.py
+│   │       │   ├── base.py         # 基础提供者接口
+│   │       │   ├── factory.py      # 模型工厂
+│   │       │   └── configuration.py # 配置管理
+│   │       ├── graph.py            # LangGraph工作流
+│   │       ├── app.py              # FastAPI应用
+│   │       └── configuration.py    # 应用配置
 │   ├── config/
-│   │   └── models.yaml         # 模型提供商配置
-│   └── pyproject.toml
-├── CUSTOM_MODELS.md            # 自定义模型支持文档
+│   │   └── models.yaml             # 模型配置（已清空）
+│   └── requirements.txt
+├── frontend/                        # 前端应用
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── InputForm.tsx       # 输入表单
+│   │   │   ├── ResearchResults.tsx # 结果展示
+│   │   │   └── ui/                 # UI组件
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   └── vite.config.ts
 └── README.md
 ```
 
@@ -122,32 +124,18 @@ make dev
 
 ### 4. 模型配置
 
-编辑 `backend/config/models.yaml` 文件来配置可用的模型提供商：
+**注意：所有模型提供商配置已被删除。**
+
+`backend/config/models.yaml` 文件现在为空：
 
 ```yaml
 providers:
-  openai_compatible:
-    name: openai_compatible
-    api_key_env: OPENAI_API_KEY
-    base_url: https://api.openai.com/v1
-    default_models:
-      query_generator: gpt-4
-      reflection: gpt-4
-      answer: gpt-4
-    description: OpenAI compatible models (including custom endpoints)
-    supports_structured_output: true
-    supports_tools: true
-    max_retries: 2
+  # 所有提供商配置已被移除
 ```
 
 ### 5. 测试模型系统
 
-运行测试脚本验证模型系统是否正常工作：
-
-```bash
-cd backend
-python test_models.py
-```
+**注意：由于所有模型提供商已被删除，模型系统测试将无法正常工作。**
 
 ## 后端代理工作原理（高级概述）
 
@@ -350,4 +338,4 @@ curl http://localhost:8123/api/models/default
 - 🚀 基本的LangGraph研究代理
 - 💬 React前端界面
 - 🔍 Google Search API集成
-- 📄 引用和答案生成 
+- 📄 引用和答案生成

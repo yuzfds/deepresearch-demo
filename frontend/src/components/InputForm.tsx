@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { SquarePen, Brain, Send, StopCircle, Zap, Cpu } from "lucide-react";
+import { SquarePen, Brain, Send, StopCircle, Cpu } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -67,13 +67,14 @@ export const InputForm: React.FC<InputFormProps> = ({
           }
         } else {
           console.error("Failed to load models");
-          // Fallback to hardcoded AICloud GLM-4.5 model
-          setModel("aicloud_glm45/glm-4.5");
+          // Fallback to first available model if any providers exist
+          if (providers.length > 0 && providers[0].models.length > 0) {
+            setModel(providers[0].models[0].id);
+          }
         }
       } catch (error) {
         console.error("Error loading models:", error);
-        // Fallback to hardcoded AICloud GLM-4.5 model
-        setModel("aicloud_glm45/glm-4.5");
+        // No fallback to hardcoded model - let user select from available models
       } finally {
         setIsLoadingModels(false);
       }
@@ -194,29 +195,36 @@ export const InputForm: React.FC<InputFormProps> = ({
                     加载模型中...
                   </SelectItem>
                 ) : (
-                  providers.flatMap((provider) =>
-                    provider.models.map((modelInfo) => (
-                      <SelectItem
-                        key={modelInfo.id}
-                        value={modelInfo.id}
-                        className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
-                      >
-                        <div className="flex flex-col">
-                          <div className="flex items-center">
-                            {provider.name === "openai_compatible" ? (
-                              <Cpu className="h-4 w-4 mr-2 text-blue-400" />
-                            ) : (
+                  providers.map((provider) => (
+                    <div key={provider.name}>
+                      {/* Provider header */}
+                      <div className="px-2 py-1 text-xs font-semibold text-neutral-400 uppercase tracking-wide border-b border-neutral-600 mb-1">
+                        {provider.description}
+                      </div>
+                      {/* Provider models */}
+                      {provider.models.map((modelInfo) => (
+                        <SelectItem
+                          key={modelInfo.id}
+                          value={modelInfo.id}
+                          className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer pl-4"
+                        >
+                          <div className="flex flex-col">
+                            <div className="flex items-center">
                               <Cpu className="h-4 w-4 mr-2 text-purple-400" />
-                            )}
-                            <span className="text-sm">{modelInfo.name}</span>
+                              <span className="text-sm">{modelInfo.name}</span>
+                            </div>
+                            <span className="text-xs text-neutral-500 ml-6">
+                              {modelInfo.description}
+                            </span>
                           </div>
-                          <span className="text-xs text-neutral-400 ml-6">
-                            {provider.name}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))
-                  )
+                        </SelectItem>
+                      ))}
+                      {/* Separator between providers */}
+                      {provider !== providers[providers.length - 1] && (
+                        <div className="border-t border-neutral-600 my-2" />
+                      )}
+                    </div>
+                  ))
                 )}
               </SelectContent>
             </Select>

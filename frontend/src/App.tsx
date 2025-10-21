@@ -23,9 +23,9 @@ export default function App() {
     reasoning_model: string;
   }>({
     apiUrl: import.meta.env.DEV
-      ? "http://localhost:2024"
+      ? "http://localhost:8123"
       : "http://localhost:8123",
-    assistantId: "agent",
+    assistantId: "fe096781-5601-53d2-b2f6-0d3403f7e9ca",
     messagesKey: "messages",
     onUpdateEvent: (event: any) => {
       let processedEvent: ProcessedEvent | null = null;

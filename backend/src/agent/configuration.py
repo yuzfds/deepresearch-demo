@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 class ModelReference(BaseModel):
     """Reference to a specific model with provider information."""
-    provider: str = Field(default="aicloud_glm45", description="Model provider name")
+    provider: str = Field(description="Model provider name")
     model: str = Field(description="Model name")
 
     @classmethod
@@ -16,15 +16,21 @@ class ModelReference(BaseModel):
         """Parse a model string in format 'provider/model' or just 'model'.
 
         Examples:
-            'openai_compatible/gpt-4' -> ModelReference(provider='openai_compatible', model='gpt-4')
-            'gpt-4' -> ModelReference(provider='openai_compatible', model='gpt-4')  # legacy support
+            'aicloud/gpt-oss-120b' -> ModelReference(provider='aicloud', model='gpt-oss-120b')
+            'gpt-oss-120b' -> ModelReference(provider='aicloud', model='gpt-oss-120b')  # legacy support
         """
         if '/' in model_string:
             provider, model = model_string.split('/', 1)
             return cls(provider=provider, model=model)
         else:
-            # Legacy support - assume aicloud_glm45 provider for backward compatibility
-            return cls(provider="aicloud_glm45", model=model_string)
+            # Legacy support - use first available provider for backward compatibility
+            from agent.models import get_model_factory
+            model_factory = get_model_factory()
+            providers = model_factory.list_providers()
+            if providers:
+                return cls(provider=providers[0], model=model_string)
+            else:
+                raise ValueError("No model providers configured")
 
     def __str__(self) -> str:
         return f"{self.provider}/{self.model}"
@@ -34,21 +40,21 @@ class Configuration(BaseModel):
     """The configuration for the agent."""
 
     query_generator_model: str = Field(
-        default="aicloud_glm45/glm-4.5",
+        default="aicloud/gpt-oss-120b",
         metadata={
             "description": "The language model to use for query generation. Format: 'provider/model_name'"
         },
     )
 
     reflection_model: str = Field(
-        default="aicloud_glm45/glm-4.5",
+        default="aicloud/gpt-oss-120b",
         metadata={
             "description": "The language model to use for reflection. Format: 'provider/model_name'"
         },
     )
 
     answer_model: str = Field(
-        default="aicloud_glm45/glm-4.5",
+        default="aicloud/gpt-oss-120b",
         metadata={
             "description": "The language model to use for final answers. Format: 'provider/model_name'"
         },
@@ -139,10 +145,9 @@ class Configuration(BaseModel):
     @classmethod
     def create_with_legacy_defaults(cls) -> "Configuration":
         """Create configuration with legacy defaults for backward compatibility."""
-        return cls(
-            query_generator_model="gpt-4",
-            reflection_model="gpt-4",
-            answer_model="gpt-4"
+        raise ValueError(
+            "Legacy default configuration is no longer supported. "
+            "All model providers have been removed."
         )
 
     def migrate_legacy_models(self):
@@ -154,9 +159,12 @@ class Configuration(BaseModel):
             if not isinstance(current_value, str):
                 continue
 
-            # If it doesn't contain a provider, assume it's a legacy openai_compatible model
-            if '/' not in current_value and not current_value.startswith('openai_compatible/'):
-                setattr(self, field_name, f"openai_compatible/{current_value}")
+            # Legacy model format is no longer supported - all providers have been removed
+            if '/' not in current_value:
+                raise ValueError(
+                    f"Legacy model format '{current_value}' is no longer supported. "
+                    f"All model providers have been removed."
+                )
 
     def validate_models(self):
         """Validate that all configured models are properly formatted."""
